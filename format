@@ -1,0 +1,43 @@
+#!/bin/sh
+set -ux
+
+dev="$1"
+mnt="mnt"
+
+[ -z "$dev" ] && exit 1
+
+sgdisk \
+	--zap-all \
+	--new=1:0:+64M --typecode=0:ef00 \
+	--new=2:0:-16G \
+	--new=3:0:0 \
+	--new=4:34:0 --typecode=0:ef02 \
+	--hybrid 1:2:3:EE \
+	"$dev"
+
+mkfs.fat -F32 -n usb-efi "${dev}1"
+mkfs.ext4 -L usb-boot "${dev}2"
+mkfs.exfat -L usb-data "${dev}3"
+
+mkdir "$mnt"
+mount "${dev}2" "$mnt"
+
+	mkdir "${mnt}/boot"
+	mkdir "${mnt}/efi"
+	mount "${dev}1" "${mnt}/efi"
+
+	grub-install \
+		--target=x86_64-efi \
+		--recheck \
+		--removable \
+		--efi-directory="${mnt}/efi" \
+		--boot-directory="${mnt}/boot"
+
+	grub-install \
+		--target=i386-pc \
+		--recheck \
+		--boot-directory="${mnt}/boot" \
+		"${dev}"
+
+umount -R "$mnt"
+rmdir "$mnt"
